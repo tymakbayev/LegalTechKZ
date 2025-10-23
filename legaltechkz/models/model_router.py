@@ -7,6 +7,8 @@ import logging
 
 from legaltechkz.models.base.base_model import BaseModel
 from legaltechkz.models.openai_model import OpenAIModel
+from legaltechkz.models.anthropic_model import AnthropicModel
+from legaltechkz.models.gemini_model import GeminiModel
 
 class ModelRouter:
     """
@@ -27,11 +29,14 @@ class ModelRouter:
         """
         self.models: Dict[str, BaseModel] = {}
         self.model_classes: Dict[str, Type[BaseModel]] = {
-            "openai": OpenAIModel
+            "openai": OpenAIModel,
+            "anthropic": AnthropicModel,
+            "gemini": GeminiModel,
+            "google": GeminiModel  # Alias for gemini
         }
         self.default_model_config = default_model_config or {
             "provider": "openai",
-            "model_name": "gpt-4",
+            "model_name": "gpt-4.1",
             "temperature": 0.0
         }
         self.default_model = None
@@ -132,7 +137,7 @@ class ModelRouter:
         
         # Check if we have a class for this provider
         if provider not in self.model_classes:
-            logging.error(f"Unknown model provider: {provider}. Using OpenAI as fallback.")
+            logging.error(f"Unknown model provider: {provider}. Supported providers: {list(self.model_classes.keys())}. Using OpenAI as fallback.")
             provider = "openai"
         
         try:
@@ -148,12 +153,12 @@ class ModelRouter:
             
         except Exception as e:
             logging.error(f"Error creating model for provider {provider}: {e}")
-            
+
             # Fallback to OpenAI with minimal config
             try:
-                return OpenAIModel(model_name="gpt-4")
-            except Exception:
-                raise ValueError(f"Failed to create model: {e}")
+                return OpenAIModel(model_name="gpt-4.1")
+            except Exception as fallback_error:
+                raise ValueError(f"Failed to create model for {provider}: {e}. Fallback also failed: {fallback_error}")
     
     def list_available_models(self) -> List[Dict[str, Any]]:
         """

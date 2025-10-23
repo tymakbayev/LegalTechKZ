@@ -1,7 +1,7 @@
 """
-Short-term memory module for the ANUS framework.
+Short-term memory module for the LegalTechKZ framework.
 
-Because even an ANUS needs to remember what it just processed.
+Provides volatile in-memory storage with automatic cleanup.
 """
 
 from typing import Dict, List, Any, Optional, Union
@@ -16,21 +16,10 @@ from legaltechkz.core.memory.base_memory import BaseMemory
 class ShortTermMemory(BaseMemory):
     """
     In-memory implementation of the BaseMemory interface.
-    
+
     Provides a volatile memory store with automatic pruning of old items.
-    
-    Just like the human ANUS, it's good at handling recent input but tends to 
-    forget older stuff if not regularly refreshed.
+    Uses LRU (Least Recently Used) eviction strategy when capacity is reached.
     """
-    
-    # Funny memory-related messages
-    _memory_messages = [
-        "ANUS short-term memory retaining item...",
-        "Storing this for quick retrieval from your ANUS...",
-        "This item is now tightly held in ANUS memory...",
-        "Squeezing this into ANUS short-term storage...",
-        "ANUS will remember this, at least for a little while..."
-    ]
     
     def __init__(
         self, 
@@ -55,11 +44,11 @@ class ShortTermMemory(BaseMemory):
         self.lru_queue: List[tuple] = []  # Priority queue for LRU eviction
         
         if capacity < 100:
-            logging.warning(f"ANUS short-term memory capacity of {capacity} is quite small. Performance may suffer.")
+            logging.warning(f"Short-term memory capacity of {capacity} is quite small. Consider increasing for better performance.")
         elif capacity > 10000:
-            logging.warning(f"ANUS short-term memory capacity of {capacity} is unusually large. Hope you have enough RAM!")
-        
-        logging.info(f"ANUS short-term memory initialized with capacity for {capacity} items and {ttl}s retention")
+            logging.warning(f"Short-term memory capacity of {capacity} is unusually large. Ensure sufficient RAM is available.")
+
+        logging.info(f"Short-term memory initialized with capacity for {capacity} items and {ttl}s retention")
     
     def add(self, item: Dict[str, Any]) -> str:
         """
@@ -92,14 +81,12 @@ class ShortTermMemory(BaseMemory):
         if len(self.items) > self.capacity:
             self._evict_lru()
             
-        # 5% chance to log a funny memory message
-        if random.random() < 0.05:
-            logging.debug(random.choice(self._memory_messages))
+        # Log memory operations
             
         # Log capacity status if getting full
         capacity_pct = len(self.items) / self.capacity * 100
         if capacity_pct > 90:
-            logging.warning(f"ANUS short-term memory is {capacity_pct:.1f}% full. Starting to feel tight in here!")
+            logging.warning(f"Short-term memory is {capacity_pct:.1f}% full. Starting to feel tight in here!")
         
         return identifier
     
@@ -120,14 +107,14 @@ class ShortTermMemory(BaseMemory):
         
         # Check if the item exists
         if identifier not in self.items:
-            logging.debug(f"ANUS has no recollection of item {identifier[:8]}...")
+            logging.debug(f"Item not found of item {identifier[:8]}...")
             return None
         
         # Update access time
         self.access_times[identifier] = time.time()
         
         # Return the item
-        logging.debug(f"ANUS recalls this item perfectly!")
+        logging.debug(f"Item retrieved successfully")
         return self.items[identifier]
     
     def search(self, query: Dict[str, Any], limit: int = 10) -> List[Dict[str, Any]]:
@@ -146,7 +133,7 @@ class ShortTermMemory(BaseMemory):
         # Prune expired items
         self._prune_expired()
         
-        logging.debug(f"ANUS is probing deeply for matching items...")
+        logging.debug(f"Searching for matching items...")
         
         results = []
         
@@ -177,9 +164,9 @@ class ShortTermMemory(BaseMemory):
         results.sort(key=lambda x: x["created_at"], reverse=True)
         
         if not results:
-            logging.debug("ANUS found nothing that matches. How disappointing.")
+            logging.debug("No matching items found")
         else:
-            logging.debug(f"ANUS successfully extracted {len(results)} matching items!")
+            logging.debug(f"Successfully retrieved {len(results)} matching items!")
         
         return results
     
@@ -199,7 +186,7 @@ class ShortTermMemory(BaseMemory):
         
         # Check if the item exists
         if identifier not in self.items:
-            logging.debug(f"ANUS can't update what it doesn't have (identifier: {identifier[:8]})")
+            logging.debug(f"Cannot update non-existent item (identifier: {identifier[:8]})")
             return False
         
         # Update the item
@@ -208,7 +195,7 @@ class ShortTermMemory(BaseMemory):
         # Update access time
         self.access_times[identifier] = time.time()
         
-        logging.debug(f"ANUS memory successfully updated with fresh content")
+        logging.debug(f"Memory successfully updated with fresh content")
         return True
     
     def delete(self, identifier: str) -> bool:
@@ -232,7 +219,7 @@ class ShortTermMemory(BaseMemory):
         
         # Note: The item will remain in the LRU queue, but will be skipped when it's popped
         
-        logging.debug(f"ANUS has purged this item from its memory")
+        logging.debug(f"Item deleted successfully")
         return True
     
     def clear(self) -> None:
@@ -245,7 +232,7 @@ class ShortTermMemory(BaseMemory):
         self.creation_times = {}
         self.lru_queue = []
         
-        logging.info(f"ANUS memory has been completely flushed of {old_count} items. Fresh and clean!")
+        logging.info(f"Memory has been completely flushed of {old_count} items. All items cleared")
     
     def get_stats(self) -> Dict[str, Any]:
         """
@@ -258,13 +245,13 @@ class ShortTermMemory(BaseMemory):
         
         # Add a funny message based on utilization
         if utilization > 0.9:
-            status = "ANUS memory is nearly full! Things are getting tight in here."
+            status = "Memory is nearly full! Things are getting tight in here."
         elif utilization > 0.7:
-            status = "ANUS memory is filling up nicely."
+            status = "Memory is filling up nicely."
         elif utilization > 0.4:
-            status = "ANUS memory has plenty of room for more."
+            status = "Memory has plenty of room for more."
         else:
-            status = "ANUS memory is mostly empty. Feed me more data!"
+            status = "Memory is mostly empty. Feed me more data!"
             
         return {
             "type": "short_term",
@@ -290,7 +277,7 @@ class ShortTermMemory(BaseMemory):
             for identifier in expired_identifiers:
                 self.delete(identifier)
             
-            logging.debug(f"ANUS has expelled {len(expired_identifiers)} expired items from memory")
+            logging.debug(f"Removed {len(expired_identifiers)} expired items from memory")
     
     def _evict_lru(self) -> None:
         """
@@ -306,5 +293,5 @@ class ShortTermMemory(BaseMemory):
             # Delete the item
             item_name = self.items[identifier].get("name", "unknown")
             self.delete(identifier)
-            logging.debug(f"ANUS had to push out '{item_name}' to make room for new content")
+            logging.debug(f"Evicted item '{item_name}' to make room for new content")
             break 
