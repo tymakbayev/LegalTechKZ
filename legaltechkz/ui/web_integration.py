@@ -81,9 +81,9 @@ class WebExpertiseController:
             self.validator = CompletenessValidator(self.fragments)
 
             # Подсчет элементов
-            articles = [f for f in self.fragments if f.element_type == "article"]
-            chapters = [f for f in self.fragments if f.element_type == "chapter"]
-            paragraphs = [f for f in self.fragments if f.element_type == "paragraph"]
+            articles = [f for f in self.fragments if f.type == "article"]
+            chapters = [f for f in self.fragments if f.type == "chapter"]
+            paragraphs = [f for f in self.fragments if f.type == "paragraph"]
 
             return {
                 "success": True,
@@ -271,7 +271,7 @@ class WebExpertiseController:
             # TODO: Интеграция с реальными экспертными агентами
             # Сейчас используем заглушки для демонстрации
 
-            articles = [f for f in self.fragments if f.element_type == "article"]
+            articles = [f for f in self.fragments if f.type == "article"]
 
             # Имитация анализа
             issues_count = 0
