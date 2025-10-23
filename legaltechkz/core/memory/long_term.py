@@ -1,54 +1,83 @@
 """
-Long-term memory module for the ANUS framework.
+Long-term memory module for the LegalTechKZ framework.
+
+Provides persistent file-based storage with optional vector search capabilities.
 """
 
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Tuple
 import uuid
 import time
 import json
 import os
 import logging
+import numpy as np
 from pathlib import Path
 
 from legaltechkz.core.memory.base_memory import BaseMemory
 
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+
 class LongTermMemory(BaseMemory):
     """
     Persistent implementation of the BaseMemory interface.
-    
-    Provides a file-based persistent memory store.
+
+    Provides a file-based persistent memory store with optional vector search.
     """
-    
+
     def __init__(
-        self, 
+        self,
         storage_path: Optional[str] = None,
         index_in_memory: bool = True,
+        enable_vector_search: bool = True,
+        embedding_model: str = "all-MiniLM-L6-v2",
         **kwargs
     ):
         """
         Initialize a LongTermMemory instance.
-        
+
         Args:
             storage_path: Path to store memory files. If None, uses a default location.
             index_in_memory: Whether to keep an in-memory index for faster searches.
+            enable_vector_search: Whether to enable semantic vector search.
+            embedding_model: Name of the sentence-transformers model for embeddings.
             **kwargs: Additional configuration options.
         """
         super().__init__(**kwargs)
-        
+
         # Set storage path
         if storage_path is None:
             home_dir = os.path.expanduser("~")
-            storage_path = os.path.join(home_dir, ".anus", "memory")
-        
+            storage_path = os.path.join(home_dir, ".legaltechkz", "memory")
+
         self.storage_path = storage_path
         self.index_in_memory = index_in_memory
-        
+        self.enable_vector_search = enable_vector_search and SENTENCE_TRANSFORMERS_AVAILABLE
+
         # Create storage directory if it doesn't exist
         os.makedirs(self.storage_path, exist_ok=True)
-        
+
         # Create indexes
         self.index: Dict[str, Dict[str, Any]] = {}
-        
+        self.embeddings: Dict[str, np.ndarray] = {}  # For vector search
+
+        # Initialize embedding model if vector search is enabled
+        if self.enable_vector_search:
+            try:
+                self.embedding_model = SentenceTransformer(embedding_model)
+                logging.info(f"Vector search enabled with model: {embedding_model}")
+            except Exception as e:
+                logging.warning(f"Failed to load embedding model: {e}. Vector search disabled.")
+                self.enable_vector_search = False
+                self.embedding_model = None
+        else:
+            self.embedding_model = None
+            if not SENTENCE_TRANSFORMERS_AVAILABLE:
+                logging.info("sentence-transformers not available. Vector search disabled.")
+
         # Load index from disk if using in-memory indexing
         if self.index_in_memory:
             self._load_index()
@@ -56,16 +85,16 @@ class LongTermMemory(BaseMemory):
     def add(self, item: Dict[str, Any]) -> str:
         """
         Add an item to memory and return its identifier.
-        
+
         Args:
             item: The item to add to memory.
-            
+
         Returns:
             A string identifier for the added item.
         """
         # Generate a unique identifier
         identifier = str(uuid.uuid4())
-        
+
         # Add metadata
         item_with_metadata = item.copy()
         item_with_metadata["_meta"] = {
@@ -73,14 +102,24 @@ class LongTermMemory(BaseMemory):
             "created_at": time.time(),
             "updated_at": time.time()
         }
-        
+
+        # Generate embedding for vector search if enabled
+        if self.enable_vector_search:
+            text_content = self._extract_text_content(item)
+            if text_content:
+                try:
+                    embedding = self.embedding_model.encode(text_content)
+                    self.embeddings[identifier] = embedding
+                except Exception as e:
+                    logging.error(f"Failed to generate embedding for item {identifier}: {e}")
+
         # Save the item to disk
         self._save_item(identifier, item_with_metadata)
-        
+
         # Update the index
         if self.index_in_memory:
             self.index[identifier] = item_with_metadata
-        
+
         return identifier
     
     def get(self, identifier: str) -> Optional[Dict[str, Any]]:
@@ -342,3 +381,92 @@ class LongTermMemory(BaseMemory):
                 return False
         
         return True 
+    def semantic_search(
+        self,
+        query: str,
+        limit: int = 10,
+        similarity_threshold: float = 0.5
+    ) -> List[Dict[str, Any]]:
+        """
+        Perform semantic search using vector similarity.
+
+        Args:
+            query: The search query text.
+            limit: Maximum number of results to return.
+            similarity_threshold: Minimum similarity score (0-1) for results.
+
+        Returns:
+            A list of matching items sorted by relevance.
+        """
+        if not self.enable_vector_search:
+            logging.warning("Vector search is not enabled. Falling back to standard search.")
+            return self.search({"content": query}, limit=limit)
+
+        if not self.embeddings:
+            logging.warning("No embeddings available for search.")
+            return []
+
+        try:
+            # Generate embedding for the query
+            query_embedding = self.embedding_model.encode(query)
+
+            # Calculate similarities
+            similarities: List[Tuple[str, float]] = []
+            for identifier, item_embedding in self.embeddings.items():
+                # Cosine similarity
+                similarity = np.dot(query_embedding, item_embedding) / (
+                    np.linalg.norm(query_embedding) * np.linalg.norm(item_embedding)
+                )
+
+                if similarity >= similarity_threshold:
+                    similarities.append((identifier, float(similarity)))
+
+            # Sort by similarity (highest first)
+            similarities.sort(key=lambda x: x[1], reverse=True)
+
+            # Limit results
+            similarities = similarities[:limit]
+
+            # Retrieve items
+            results = []
+            for identifier, similarity in similarities:
+                item = self.get(identifier)
+                if item:
+                    results.append({
+                        "id": identifier,
+                        "item": item,
+                        "similarity": similarity,
+                        "created_at": item.get("_meta", {}).get("created_at", 0)
+                    })
+
+            logging.info(f"Semantic search found {len(results)} results")
+            return results
+
+        except Exception as e:
+            logging.error(f"Error during semantic search: {e}")
+            return []
+
+    def _extract_text_content(self, item: Dict[str, Any]) -> str:
+        """
+        Extract text content from an item for embedding generation.
+
+        Args:
+            item: The item to extract text from.
+
+        Returns:
+            Concatenated text content.
+        """
+        text_parts = []
+
+        # Common text fields
+        text_fields = ["content", "text", "description", "title", "summary", "name"]
+
+        for field in text_fields:
+            if field in item and isinstance(item[field], str):
+                text_parts.append(item[field])
+
+        # If no text found, convert entire item to string
+        if not text_parts:
+            text_parts.append(str(item))
+
+        return " ".join(text_parts)
