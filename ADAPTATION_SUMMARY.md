@@ -4,13 +4,13 @@
 22 октября 2025
 
 ## Цель адаптации
-Адаптация фреймворка ANUS (Autonomous Networked Utility System) для проведения правовой экспертизы нормативно-правовых актов Республики Казахстан с использованием **исключительно** официального ресурса **adilet.zan.kz**.
+Адаптация фреймворка LegalTechKZ (Autonomous Networked Utility System) для проведения правовой экспертизы нормативно-правовых актов Республики Казахстан с использованием **исключительно** официального ресурса **adilet.zan.kz**.
 
 ## Что было реализовано
 
 ### 1. Специализированные инструменты (Tools)
 
-#### `anus/tools/adilet_search.py`
+#### `legaltechkz/tools/adilet_search.py`
 - **AdiletSearchTool** - инструмент для поиска НПА на adilet.zan.kz
   - Поиск по названию, номеру, дате
   - Фильтрация по типу документа (закон, кодекс, указ, постановление, приказ)
@@ -22,7 +22,7 @@
   - Извлечение метаданных (название, номер, дата, статус)
   - Кэширование документов
 
-#### `anus/tools/legal_analysis.py`
+#### `legaltechkz/tools/legal_analysis.py`
 - **LegalConsistencyChecker** - проверка консистентности НПА
   - Анализ структуры документа (главы, статьи, параграфы)
   - Проверка последовательности нумерации
@@ -42,7 +42,7 @@
 
 ### 2. Специализированный агент
 
-#### `anus/agents/legal_expert_agent.py`
+#### `legaltechkz/agents/legal_expert_agent.py`
 - **LegalExpertAgent** - агент для правовой экспертизы
   - Автоматическое определение типа задачи
   - Поиск и анализ документов
@@ -134,8 +134,8 @@ security:
 ## Структура файлов
 
 ```
-ANUS/
-├── anus/
+LegalTechKZ/
+├── legaltechkz/
 │   ├── tools/
 │   │   ├── adilet_search.py          # Поиск на adilet.zan.kz
 │   │   └── legal_analysis.py          # Инструменты анализа НПА
@@ -159,7 +159,7 @@ ANUS/
 
 ### Простой поиск
 ```python
-from anus.tools.adilet_search import AdiletSearchTool
+from legaltechkz.tools.adilet_search import AdiletSearchTool
 
 search = AdiletSearchTool()
 result = search.execute(query="Налоговый кодекс", doc_type="code")
@@ -168,7 +168,7 @@ print(f"Найдено: {result['result_count']} документов")
 
 ### Проверка консистентности
 ```python
-from anus.tools.legal_analysis import LegalConsistencyChecker
+from legaltechkz.tools.legal_analysis import LegalConsistencyChecker
 
 checker = LegalConsistencyChecker()
 result = checker.execute(
@@ -181,7 +181,7 @@ print(f"Качество: {result['overall_assessment']['quality']}")
 
 ### Полная экспертиза
 ```python
-from anus.agents.legal_expert_agent import LegalExpertAgent
+from legaltechkz.agents.legal_expert_agent import LegalExpertAgent
 
 agent = LegalExpertAgent()
 result = agent.execute(
@@ -244,7 +244,7 @@ print(f"Заключение: {result['expert_conclusion']['final_verdict']}")
 
 ## Заключение
 
-Фреймворк ANUS успешно адаптирован для проведения правовой экспертизы НПА РК. Система обеспечивает:
+Фреймворк LegalTechKZ успешно адаптирован для проведения правовой экспертизы НПА РК. Система обеспечивает:
 
 - **Автоматизированный поиск** нормативно-правовых актов на adilet.zan.kz
 - **Комплексный анализ** документов (структура, ссылки, терминология)
@@ -260,6 +260,6 @@ print(f"Заключение: {result['expert_conclusion']['final_verdict']}")
 
 ---
 
-**Разработано на базе ANUS AI Framework**
+**Разработано на базе LegalTechKZ AI Framework**
 **Адаптировано для правовой экспертизы НПА Республики Казахстан**
 **Дата: 22 октября 2025**
