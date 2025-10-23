@@ -14,6 +14,10 @@ from typing import Optional, Dict, Any, List
 import json
 from datetime import datetime
 
+# Загрузка переменных окружения из .env файла
+from dotenv import load_dotenv
+load_dotenv()  # Загружает переменные из .env файла в os.environ
+
 # Добавляем путь к проекту
 sys.path.insert(0, str(Path(__file__).parent))
 
