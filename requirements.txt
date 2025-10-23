@@ -12,3 +12,7 @@ google-genai>=0.3.0        # Gemini 2.5 Flash support (NOT google-generativeai)
 # Vector search and embeddings
 numpy>=1.24.0
 sentence-transformers>=2.2.0  # For local embeddings
+
+# Web interface
+streamlit>=1.29.0          # Web UI framework
+watchdog>=3.0.0            # File system observer (Streamlit dependency)
