@@ -233,18 +233,44 @@ class AdiletSearchTool(BaseTool):
             soup = BeautifulSoup(html, 'html.parser')
             results = []
 
-            # Ищем элементы результатов (структура может отличаться)
-            search_items = soup.find_all('div', class_='search-result-item')
+            # Ищем различные варианты структуры результатов adilet.zan.kz
+            search_items = (
+                soup.find_all('div', class_='search-result-item') or
+                soup.find_all('div', class_='document-item') or
+                soup.find_all('div', class_='doc-item') or
+                soup.find_all('tr', class_='document-row') or
+                soup.find_all('li', class_='result')
+            )
 
-            for item in search_items[:10]:  # Ограничиваем 10 результатами
-                doc_info = self._extract_document_info(item)
-                if doc_info:
-                    results.append(doc_info)
+            # Если не нашли специфичные классы, ищем все ссылки на документы
+            if not search_items:
+                logger.info("Не нашли специфичные элементы, ищем ссылки на документы")
+                # Ищем все ссылки которые ведут на /rus/docs/
+                links = soup.find_all('a', href=re.compile(r'/rus/docs/[A-Z]'))
+                logger.info(f"Найдено ссылок на документы: {len(links)}")
 
+                seen_urls = set()
+                for link in links[:20]:  # Проверяем до 20 ссылок
+                    doc_info = self._extract_from_link(link)
+                    if doc_info and doc_info['url'] not in seen_urls:
+                        results.append(doc_info)
+                        seen_urls.add(doc_info['url'])
+                        if len(results) >= 10:  # Ограничиваем 10 результатами
+                            break
+            else:
+                logger.info(f"Найдено элементов результатов: {len(search_items)}")
+                for item in search_items[:10]:  # Ограничиваем 10 результатами
+                    doc_info = self._extract_document_info(item)
+                    if doc_info:
+                        results.append(doc_info)
+
+            logger.info(f"Найдено документов после парсинга: {len(results)}")
             return results
 
         except Exception as e:
             logger.error(f"Ошибка парсинга результатов: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
 
     def _extract_document_info(self, item) -> Optional[Dict[str, Any]]:
@@ -310,6 +336,74 @@ class AdiletSearchTool(BaseTool):
                 return date_elem.get_text(strip=True)
         except Exception:
             pass
+
+        return None
+
+    def _extract_from_link(self, link) -> Optional[Dict[str, Any]]:
+        """
+        Извлечь информацию о документе из ссылки
+
+        Args:
+            link: BeautifulSoup элемент ссылки
+
+        Returns:
+            Словарь с информацией о документе
+        """
+        try:
+            href = link.get('href', '')
+            if not href or not href.startswith('/rus/docs/'):
+                return None
+
+            url = urljoin(self.BASE_URL, href)
+            title = link.get_text(strip=True)
+
+            if not title or len(title) < 10:  # Слишком короткое название - скорее всего не то
+                return None
+
+            # Извлекаем номер из title или URL
+            doc_number = self._extract_doc_number(title)
+            if not doc_number:
+                # Попробуем извлечь из URL
+                url_match = re.search(r'/docs/([A-Z]\d+)', href)
+                if url_match:
+                    doc_number = url_match.group(1)
+
+            # Ищем дату в тексте рядом с ссылкой
+            parent = link.parent
+            date_text = parent.get_text() if parent else title
+            doc_date = self._extract_date_from_text(date_text)
+
+            # Определяем статус (по умолчанию - действует если не указано обратное)
+            status = "Действует"
+            if parent and ("утратил" in parent.get_text().lower() or "недействующ" in parent.get_text().lower()):
+                status = "Утратил силу"
+
+            return {
+                "title": title,
+                "url": url,
+                "number": doc_number or "Не указан",
+                "date": doc_date or "Не указана",
+                "status": status,
+                "source": "adilet.zan.kz"
+            }
+
+        except Exception as e:
+            logger.error(f"Ошибка извлечения из ссылки: {e}")
+            return None
+
+    def _extract_date_from_text(self, text: str) -> Optional[str]:
+        """Извлечь дату из текста"""
+        # Ищем даты в различных форматах
+        date_patterns = [
+            r'(\d{1,2}\.\d{1,2}\.\d{4})',  # дд.мм.гггг
+            r'(\d{1,2}\s+\w+\s+\d{4})',     # дд месяц гггг
+            r'от\s+(\d{1,2}\.\d{1,2}\.\d{4})',  # от дд.мм.гггг
+        ]
+
+        for pattern in date_patterns:
+            match = re.search(pattern, text)
+            if match:
+                return match.group(1)
 
         return None
 
