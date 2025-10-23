@@ -1,11 +1,11 @@
 """
 Инструмент поиска по базе данных НПА РК на adilet.zan.kz
 
-Этот инструмент предназначен для поиска нормативно-правовых актов Республики Казахстан
-только на официальном ресурсе adilet.zan.kz для обеспечения консистентности и точности.
+Использует Google Search с оператором site:adilet.zan.kz для более точных результатов.
 """
 
 import logging
+import os
 import requests
 from typing import Dict, Any, Union, List, Optional
 from bs4 import BeautifulSoup
@@ -76,9 +76,37 @@ class AdiletSearchTool(BaseTool):
         """Инициализация инструмента поиска Adilet"""
         super().__init__()
         self.session = requests.Session()
+        # Улучшенные заголовки для обхода защиты от ботов
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0'
         })
+        # Инициализируем сессию, получив главную страницу
+        self._init_session()
+
+    def _init_session(self):
+        """Инициализировать сессию, посетив главную страницу adilet.zan.kz"""
+        try:
+            logger.info("Инициализация сессии с adilet.zan.kz")
+            response = self.session.get(f"{self.BASE_URL}/rus", timeout=10)
+            if response.status_code == 200:
+                logger.info("Сессия успешно инициализирована")
+                # Сохраняем cookies для последующих запросов
+                return True
+            else:
+                logger.warning(f"Не удалось инициализировать сессию: {response.status_code}")
+                return False
+        except Exception as e:
+            logger.warning(f"Ошибка инициализации сессии: {e}")
+            return False
 
     def execute(
         self,
@@ -191,7 +219,7 @@ class AdiletSearchTool(BaseTool):
 
     def _perform_search(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Выполнить запрос к adilet.zan.kz и распарсить результаты
+        Выполнить поиск через Google Custom Search API или напрямую на adilet.zan.kz
 
         Args:
             params: Параметры поиска
@@ -199,25 +227,272 @@ class AdiletSearchTool(BaseTool):
         Returns:
             Список найденных документов
         """
-        # В реальной реализации здесь будет запрос к adilet.zan.kz
-        # Для демонстрации возвращаем структурированный формат результатов
+        query = params.get("q", "")
+        logger.info(f"Выполняем поиск: '{query}'")
 
-        logger.info(f"Выполняем поиск с параметрами: {params}")
+        # Сначала пробуем Google Custom Search API, если есть ключ
+        google_api_key = os.environ.get("GOOGLE_CUSTOM_SEARCH_API_KEY")
+        google_cx = os.environ.get("GOOGLE_CUSTOM_SEARCH_CX")
 
+        if google_api_key and google_cx:
+            logger.info("Используем Google Custom Search API")
+            results = self._google_custom_search(query, params, google_api_key, google_cx)
+            if results:
+                return results
+            logger.warning("Google Custom Search API не вернул результатов, используем прямой поиск")
+
+        # Прямой поиск на adilet.zan.kz
+        return self._direct_adilet_search(params)
+
+    def _parse_google_results(self, html: str, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Распарсить результаты Google Search
+
+        Args:
+            html: HTML страницы результатов Google
+            status_filter: Фильтр по статусу (1 - действующий, 0 - утративший силу)
+
+        Returns:
+            Список документов
+        """
         try:
-            # Отправляем запрос
-            response = self.session.get(self.SEARCH_URL, params=params, timeout=10)
-            response.raise_for_status()
+            soup = BeautifulSoup(html, 'html.parser')
+            results = []
 
-            # Парсим HTML
-            results = self._parse_search_results(response.text)
+            # Google использует разные классы для результатов
+            # Ищем основные блоки результатов
+            search_results = soup.find_all('div', class_='g')
+
+            logger.info(f"Найдено блоков результатов Google: {len(search_results)}")
+
+            for result in search_results[:10]:  # Ограничиваем 10 результатами
+                try:
+                    # Ищем ссылку
+                    link_elem = result.find('a', href=True)
+                    if not link_elem:
+                        continue
+
+                    url = link_elem.get('href', '')
+
+                    # Фильтруем только ссылки на adilet.zan.kz/rus/docs/
+                    if 'adilet.zan.kz/rus/docs/' not in url:
+                        continue
+
+                    # Извлекаем заголовок
+                    title_elem = result.find('h3')
+                    title = title_elem.get_text(strip=True) if title_elem else "Без названия"
+
+                    # Извлекаем описание (snippet)
+                    snippet_elem = result.find('div', class_=['VwiC3b', 'IsZvec', 'aCOpRe'])
+                    snippet = snippet_elem.get_text(strip=True) if snippet_elem else ""
+
+                    # Извлекаем номер и дату из заголовка или snippet
+                    doc_number = self._extract_doc_number(title + " " + snippet)
+                    doc_date = self._extract_date_from_text(title + " " + snippet)
+
+                    # Определяем статус
+                    full_text = (title + " " + snippet).lower()
+                    if "утратил" in full_text or "недействующ" in full_text or "признан утратившим" in full_text:
+                        status = "Утратил силу"
+                    else:
+                        status = "Действует"
+
+                    # Применяем фильтр по статусу если указан
+                    if status_filter:
+                        if status_filter == "1" and status != "Действует":
+                            continue
+                        elif status_filter == "0" and status != "Утратил силу":
+                            continue
+
+                    doc_info = {
+                        "title": title,
+                        "url": url,
+                        "number": doc_number or "Не указан",
+                        "date": doc_date or "Не указана",
+                        "status": status,
+                        "source": "adilet.zan.kz (через Google Search)",
+                        "snippet": snippet[:200] if snippet else None
+                    }
+
+                    results.append(doc_info)
+                    logger.debug(f"Добавлен результат: {title[:50]}...")
+
+                except Exception as e:
+                    logger.error(f"Ошибка парсинга результата Google: {e}")
+                    continue
 
             return results
 
+        except Exception as e:
+            logger.error(f"Ошибка парсинга результатов Google: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return []
+
+    def _google_custom_search(
+        self,
+        query: str,
+        params: Dict[str, Any],
+        api_key: str,
+        cx: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Выполнить поиск через Google Custom Search JSON API
+
+        Args:
+            query: Поисковый запрос
+            params: Дополнительные параметры поиска
+            api_key: API ключ Google Custom Search
+            cx: Custom Search Engine ID
+
+        Returns:
+            Список найденных документов
+        """
+        try:
+            # Формируем запрос с site: оператором
+            search_query = f"{query} site:adilet.zan.kz"
+
+            # Добавляем фильтры
+            doc_type = params.get("type")
+            if doc_type:
+                search_query += f" {doc_type}"
+
+            year = params.get("year")
+            if year:
+                search_query += f" {year}"
+
+            # Google Custom Search JSON API endpoint
+            api_url = "https://www.googleapis.com/customsearch/v1"
+            api_params = {
+                "key": api_key,
+                "cx": cx,
+                "q": search_query,
+                "num": 10,  # Максимум 10 результатов
+                "lr": "lang_ru",  # Русский язык
+            }
+
+            logger.info(f"Google Custom Search запрос: '{search_query}'")
+
+            response = self.session.get(api_url, params=api_params, timeout=15)
+            response.raise_for_status()
+
+            data = response.json()
+            results = []
+
+            if "items" in data:
+                for item in data["items"]:
+                    url = item.get("link", "")
+
+                    # Фильтруем только ссылки на документы adilet
+                    if "adilet.zan.kz/rus/docs/" not in url:
+                        continue
+
+                    title = item.get("title", "Без названия")
+                    snippet = item.get("snippet", "")
+
+                    # Извлекаем метаданные
+                    doc_number = self._extract_doc_number(title + " " + snippet)
+                    doc_date = self._extract_date_from_text(title + " " + snippet)
+
+                    # Определяем статус
+                    full_text = (title + " " + snippet).lower()
+                    if "утратил" in full_text or "недействующ" in full_text:
+                        status = "Утратил силу"
+                    else:
+                        status = "Действует"
+
+                    # Применяем фильтр по статусу
+                    status_filter = params.get("valid")
+                    if status_filter:
+                        if status_filter == "1" and status != "Действует":
+                            continue
+                        elif status_filter == "0" and status != "Утратил силу":
+                            continue
+
+                    doc_info = {
+                        "title": title,
+                        "url": url,
+                        "number": doc_number or "Не указан",
+                        "date": doc_date or "Не указана",
+                        "status": status,
+                        "source": "adilet.zan.kz (через Google Custom Search API)",
+                        "snippet": snippet[:200] if snippet else None
+                    }
+
+                    results.append(doc_info)
+                    logger.debug(f"Добавлен результат: {title[:50]}...")
+
+                logger.info(f"Найдено через Google Custom Search: {len(results)}")
+                return results
+
+            logger.warning("Google Custom Search не вернул результатов")
+            return []
+
         except requests.RequestException as e:
-            logger.error(f"Ошибка при запросе к adilet.zan.kz: {e}")
-            # Возвращаем демо-результаты для тестирования
-            return self._get_demo_results(params.get("q", ""))
+            logger.error(f"Ошибка Google Custom Search API: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка Google Custom Search: {e}")
+            return []
+
+    def _direct_adilet_search(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Прямой поиск на adilet.zan.kz (запасной вариант)
+
+        Args:
+            params: Параметры поиска
+
+        Returns:
+            Список документов
+        """
+        logger.info("Используем прямой поиск на adilet.zan.kz")
+
+        try:
+            import time
+            # Добавляем небольшую задержку для имитации поведения пользователя
+            time.sleep(0.5)
+
+            # Добавляем Referer для более реалистичного запроса
+            headers = {
+                'Referer': f"{self.BASE_URL}/rus"
+            }
+
+            response = self.session.get(
+                self.SEARCH_URL,
+                params=params,
+                headers=headers,
+                timeout=15,
+                allow_redirects=True
+            )
+
+            logger.info(f"Ответ от adilet.zan.kz: статус {response.status_code}, URL: {response.url}")
+
+            if response.status_code == 403:
+                logger.error("Получен 403 Forbidden - сайт блокирует автоматические запросы")
+                logger.info("Рекомендация: настройте Google Custom Search API для обхода этой проблемы")
+                return []
+
+            response.raise_for_status()
+            results = self._parse_search_results(response.text)
+
+            if results:
+                logger.info(f"Прямой поиск нашел {len(results)} документов")
+            else:
+                logger.warning("Прямой поиск не нашел документов")
+
+            return results if results else []
+
+        except requests.HTTPError as e:
+            if e.response.status_code == 403:
+                logger.error("❌ Сайт adilet.zan.kz блокирует автоматические запросы (403)")
+                logger.info("💡 Решение: настройте Google Custom Search API в .env файле")
+                logger.info("   GOOGLE_CUSTOM_SEARCH_API_KEY и GOOGLE_CUSTOM_SEARCH_CX")
+            else:
+                logger.error(f"HTTP ошибка при прямом поиске: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Ошибка прямого поиска: {e}")
+            return []
 
     def _parse_search_results(self, html: str) -> List[Dict[str, Any]]:
         """
