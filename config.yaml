@@ -1,0 +1,254 @@
+# Конфигурация для системы правовой экспертизы НПА РК
+# Legal Expert Configuration for Kazakhstan Legislative Analysis
+
+# Настройки агента
+agent:
+  name: "legal_expert_kz"
+  mode: "single"  # single или multi для использования нескольких агентов
+  max_iterations: 20
+  complexity_threshold: 8
+  description: "Специализированный агент для правовой экспертизы НПА РК"
+
+# Настройки памяти
+memory:
+  short_term:
+    capacity: 2000  # Увеличена для хранения больших документов
+    ttl: 7200  # 2 часа
+  long_term:
+    enabled: true
+    storage_path: "./data/legal_memory"
+    index_in_memory: true
+    # Сохранение истории экспертиз для последующего анализа
+
+# Настройки моделей LLM
+models:
+  default:
+    provider: "openai"  # или anthropic, или другой провайдер
+    model: "gpt-4o"  # Рекомендуется использовать GPT-4 для юридических задач
+    temperature: 0.1  # Низкая температура для точности
+    max_tokens: 4000
+    # API ключ должен быть установлен в переменной окружения OPENAI_API_KEY
+
+  # Альтернативная модель для больших документов
+  long_context:
+    provider: "anthropic"
+    model: "claude-3-opus-20240229"
+    temperature: 0.1
+    max_tokens: 8000
+
+# Настройки инструментов
+tools:
+  enabled:
+    - "adilet_search"
+    - "fetch_document"
+    - "check_consistency"
+    - "detect_contradictions"
+    - "validate_references"
+
+  # Конфигурация для поиска на adilet.zan.kz
+  adilet_search:
+    base_url: "https://adilet.zan.kz"
+    search_timeout: 15  # секунды
+    max_results: 10
+    default_language: "ru"  # rus, kaz
+    retry_attempts: 3
+    retry_delay: 2  # секунды
+
+  # Настройки получения документов
+  fetch_document:
+    timeout: 30  # секунды
+    cache_documents: true
+    cache_path: "./data/legal_cache"
+    cache_ttl: 86400  # 24 часа
+
+  # Настройки проверки консистентности
+  check_consistency:
+    check_references: true
+    check_structure: true
+    check_terminology: true
+    strict_mode: false  # Строгий режим проверки
+
+  # Настройки выявления противоречий
+  detect_contradictions:
+    scope: "all"  # all, definitions, norms, procedures
+    similarity_threshold: 0.8  # Порог схожести для определения противоречий
+
+  # Настройки валидации ссылок
+  validate_references:
+    check_online: false  # Проверка ссылок онлайн (может быть медленной)
+    check_format: true
+    check_completeness: true
+
+# Специализированные агенты (для multi-agent режима)
+specialized_agents:
+  roles:
+    - "document_searcher"  # Специалист по поиску документов
+    - "structure_analyst"  # Аналитик структуры документов
+    - "legal_reviewer"     # Правовой эксперт
+    - "contradiction_detector"  # Детектор противоречий
+
+  document_searcher:
+    name: "searcher-agent"
+    max_iterations: 10
+    tools:
+      - "adilet_search"
+      - "fetch_document"
+
+  structure_analyst:
+    name: "structure-agent"
+    max_iterations: 10
+    tools:
+      - "check_consistency"
+
+  legal_reviewer:
+    name: "reviewer-agent"
+    max_iterations: 15
+    tools:
+      - "check_consistency"
+      - "validate_references"
+
+  contradiction_detector:
+    name: "detector-agent"
+    max_iterations: 10
+    tools:
+      - "detect_contradictions"
+
+# Настройки правовой экспертизы
+legal_examination:
+  # Этапы полной экспертизы
+  stages:
+    - name: "Поиск документа"
+      enabled: true
+      critical: true
+    - name: "Получение полного текста"
+      enabled: true
+      critical: true
+    - name: "Проверка консистентности"
+      enabled: true
+      critical: true
+    - name: "Валидация ссылок"
+      enabled: true
+      critical: false
+    - name: "Поиск связанных документов"
+      enabled: true
+      critical: false
+    - name: "Проверка противоречий"
+      enabled: true
+      critical: false
+    - name: "Формирование заключения"
+      enabled: true
+      critical: true
+
+  # Настройки оценки качества
+  quality_assessment:
+    scoring:
+      excellent: 95  # Порог для оценки "Отлично"
+      good: 80       # Порог для оценки "Хорошо"
+      satisfactory: 65  # Порог для оценки "Удовлетворительно"
+
+    weights:
+      structure: 0.3      # Вес структурной корректности
+      references: 0.2     # Вес валидности ссылок
+      terminology: 0.2    # Вес терминологической правильности
+      consistency: 0.3    # Вес общей консистентности
+
+  # Критерии для рекомендации документа к принятию
+  approval_criteria:
+    max_critical_issues: 0
+    max_warnings: 3
+    min_quality_score: 80
+    require_valid_references: true
+    require_correct_structure: true
+
+# Настройки отчетности
+reporting:
+  format: "markdown"  # markdown, json, pdf
+  include_metadata: true
+  include_detailed_findings: true
+  include_recommendations: true
+  language: "ru"  # ru, kz, en
+
+  # Структура экспертного заключения
+  sections:
+    - "Информация о документе"
+    - "Оценка качества"
+    - "Критические замечания"
+    - "Предупреждения"
+    - "Детализированные находки"
+    - "Рекомендации"
+    - "Итоговое заключение"
+
+# Настройки логирования
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "./logs/legal_expert.log"
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  log_to_console: true
+  log_to_file: true
+  max_log_size: 10485760  # 10 MB
+  backup_count: 5
+
+# Настройки безопасности
+security:
+  # Ограничение доменов для поиска
+  allowed_domains:
+    - "adilet.zan.kz"
+    - "zan.kz"
+
+  # Запрет на доступ к другим доменам
+  block_external_domains: true
+
+  # Валидация SSL сертификатов
+  verify_ssl: true
+
+  # Максимальный размер загружаемого документа
+  max_document_size: 10485760  # 10 MB
+
+# Дополнительные настройки
+advanced:
+  # Кэширование результатов поиска
+  cache_search_results: true
+  cache_duration: 3600  # 1 час
+
+  # Параллельная обработка
+  enable_parallel_processing: false
+  max_workers: 3
+
+  # Таймауты
+  default_timeout: 30
+  search_timeout: 15
+  document_fetch_timeout: 30
+
+  # Повторные попытки при ошибках
+  retry_on_error: true
+  max_retries: 3
+  retry_delay: 2
+
+  # Автоматическое сохранение результатов
+  auto_save_results: true
+  results_path: "./results/legal_examinations"
+
+# Словари и справочники
+dictionaries:
+  # Путь к словарю правовых терминов
+  legal_terms: "./data/dictionaries/legal_terms_kz.json"
+
+  # Путь к справочнику типов НПА
+  document_types: "./data/dictionaries/document_types.json"
+
+  # Путь к списку устаревших терминов
+  deprecated_terms: "./data/dictionaries/deprecated_terms.json"
+
+# Интеграция с внешними системами (опционально)
+integrations:
+  # Интеграция с системой документооборота
+  document_management:
+    enabled: false
+    url: ""
+    api_key: ""
+
+  # Интеграция с системой уведомлений
+  notifications:
+    enabled: false
+    email: false
+    webhook: false
