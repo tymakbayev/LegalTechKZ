@@ -40,9 +40,9 @@ git commit -m "feat: Система правовой экспертизы НПА
 - Формирование экспертных заключений
 
 Компоненты:
-- anus/tools/adilet_search.py - поиск на adilet.zan.kz
-- anus/tools/legal_analysis.py - инструменты анализа
-- anus/agents/legal_expert_agent.py - агент экспертизы
+- legaltechkz/tools/adilet_search.py - поиск на adilet.zan.kz
+- legaltechkz/tools/legal_analysis.py - инструменты анализа
+- legaltechkz/agents/legal_expert_agent.py - агент экспертизы
 - config.yaml - конфигурация системы
 - examples/legal_expert_demo.py - демонстрация
 
@@ -72,7 +72,7 @@ git push origin v1.0.0
 2. Нажмите "Add file" → "Upload files"
 
 3. Загрузите все файлы из директории `/home/user/npa-legal-expert/`:
-   - Всю папку `anus/`
+   - Всю папку `legaltechkz/`
    - Папку `examples/`
    - Папку `data/`
    - Файлы: README.md, config.yaml, requirements.txt, setup.py, .gitignore, etc.
@@ -128,13 +128,13 @@ git push origin main
 - [x] LICENSE (лицензия MIT)
 - [x] .gitignore
 
-### Код системы (папка anus/):
-- [x] anus/tools/adilet_search.py (поиск на adilet.zan.kz)
-- [x] anus/tools/legal_analysis.py (анализ НПА)
-- [x] anus/agents/legal_expert_agent.py (агент экспертизы)
-- [x] anus/core/ (ядро системы)
-- [x] anus/models/ (LLM модели)
-- [x] anus/ui/ (интерфейс)
+### Код системы (папка legaltechkz/):
+- [x] legaltechkz/tools/adilet_search.py (поиск на adilet.zan.kz)
+- [x] legaltechkz/tools/legal_analysis.py (анализ НПА)
+- [x] legaltechkz/agents/legal_expert_agent.py (агент экспертизы)
+- [x] legaltechkz/core/ (ядро системы)
+- [x] legaltechkz/models/ (LLM модели)
+- [x] legaltechkz/ui/ (интерфейс)
 
 ### Примеры:
 - [x] examples/legal_expert_demo.py (интерактивное демо)
@@ -207,14 +207,14 @@ python examples/legal_expert_demo.py
 
 ```bash
 # Тест импорта
-python -c "from anus.tools.adilet_search import AdiletSearchTool; print('OK')"
+python -c "from legaltechkz.tools.adilet_search import AdiletSearchTool; print('OK')"
 
 # Запуск демо
 python examples/legal_expert_demo.py
 
 # Простой тест
 python -c "
-from anus.tools.adilet_search import AdiletSearchTool
+from legaltechkz.tools.adilet_search import AdiletSearchTool
 search = AdiletSearchTool()
 result = search.execute(query='Налоговый кодекс', doc_type='code')
 print(f'Найдено: {result[\"result_count\"]} документов')

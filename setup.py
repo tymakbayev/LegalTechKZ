@@ -35,7 +35,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "legal-expert=anus.main:main",
+            "legal-expert=legaltechkz.main:main",
         ],
     },
     include_package_data=True,

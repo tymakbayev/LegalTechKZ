@@ -5,8 +5,8 @@
 ### 1. Клонирование репозитория
 
 ```bash
-git clone https://github.com/nikmcfly/ANUS.git
-cd ANUS
+git clone https://github.com/nikmcfly/LegalTechKZ.git
+cd LegalTechKZ
 ```
 
 ### 2. Установка зависимостей
@@ -39,7 +39,7 @@ python examples/legal_expert_demo.py
 ### Простой пример в коде
 
 ```python
-from anus.tools.adilet_search import AdiletSearchTool
+from legaltechkz.tools.adilet_search import AdiletSearchTool
 
 # Поиск закона
 search = AdiletSearchTool()
@@ -54,7 +54,7 @@ for doc in result['results']:
 ### Полная экспертиза
 
 ```python
-from anus.agents.legal_expert_agent import LegalExpertAgent
+from legaltechkz.agents.legal_expert_agent import LegalExpertAgent
 
 agent = LegalExpertAgent()
 result = agent.execute(
@@ -71,7 +71,7 @@ print(f"Заключение: {conclusion['final_verdict']}")
 ### Поиск документа
 
 ```python
-from anus.tools.adilet_search import AdiletSearchTool
+from legaltechkz.tools.adilet_search import AdiletSearchTool
 
 search = AdiletSearchTool()
 result = search.execute(
@@ -84,7 +84,7 @@ result = search.execute(
 ### Проверка консистентности
 
 ```python
-from anus.tools.legal_analysis import LegalConsistencyChecker
+from legaltechkz.tools.legal_analysis import LegalConsistencyChecker
 
 checker = LegalConsistencyChecker()
 result = checker.execute(
@@ -97,7 +97,7 @@ result = checker.execute(
 ### Сравнение документов
 
 ```python
-from anus.tools.legal_analysis import LegalContradictionDetector
+from legaltechkz.tools.legal_analysis import LegalContradictionDetector
 
 detector = LegalContradictionDetector()
 result = detector.execute(
@@ -231,7 +231,7 @@ with open("result.json", "w", encoding="utf-8") as f:
 
 ## Получение помощи
 
-- GitHub Issues: https://github.com/nikmcfly/ANUS/issues
+- GitHub Issues: https://github.com/nikmcfly/LegalTechKZ/issues
 - Документация: `LEGAL_EXPERT_README.md`
 - Примеры: `examples/`
 

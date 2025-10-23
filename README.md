@@ -33,7 +33,9 @@
 
 ## 🎯 Описание
 
-**LegalTechKZ** - это специализированная AI-система для проведения правовой экспертизы нормативно-правовых актов Республики Казахстан. Система разработана на базе фреймворка ANUS и работает **исключительно** с официальным ресурсом **adilet.zan.kz**, обеспечивая максимальную точность и консистентность данных.
+**LegalTechKZ** - это специализированная AI-система для проведения правовой экспертизы нормативно-правовых актов Республики Казахстан. Система работает **исключительно** с официальным ресурсом **adilet.zan.kz**, обеспечивая максимальную точность и консистентность данных.
+
+> **Примечание:** Проект основан на фреймворке [ANUS (Autonomous Networked Utility System)](https://github.com/nikmcfly/ANUS) и адаптирован для правовой экспертизы НПА РК.
 
 ### Для кого этот проект?
 
@@ -109,7 +111,7 @@ python examples/legal_expert_demo.py
 ### Простой пример
 
 ```python
-from anus.tools.adilet_search import AdiletSearchTool
+from legaltechkz.tools.adilet_search import AdiletSearchTool
 
 # Поиск закона
 search = AdiletSearchTool()
@@ -130,7 +132,7 @@ for doc in result['results']:
 ### Поиск и анализ документа
 
 ```python
-from anus.agents.legal_expert_agent import LegalExpertAgent
+from legaltechkz.agents.legal_expert_agent import LegalExpertAgent
 
 # Создаем агента
 agent = LegalExpertAgent()
@@ -146,7 +148,7 @@ print(result['summary'])
 ### Полная правовая экспертиза
 
 ```python
-from anus.agents.legal_expert_agent import LegalExpertAgent
+from legaltechkz.agents.legal_expert_agent import LegalExpertAgent
 
 agent = LegalExpertAgent()
 
@@ -180,8 +182,8 @@ if conclusion['recommendations']:
 ### Сравнение двух НПА
 
 ```python
-from anus.tools.adilet_search import AdiletSearchTool, AdiletDocumentFetcher
-from anus.tools.legal_analysis import LegalContradictionDetector
+from legaltechkz.tools.adilet_search import AdiletSearchTool, AdiletDocumentFetcher
+from legaltechkz.tools.legal_analysis import LegalContradictionDetector
 
 # Получаем два документа
 search = AdiletSearchTool()
@@ -209,7 +211,7 @@ print(f"Найдено противоречий: {contradictions['contradictions
 ### Пакетная обработка
 
 ```python
-from anus.agents.legal_expert_agent import LegalExpertAgent
+from legaltechkz.agents.legal_expert_agent import LegalExpertAgent
 import json
 
 agent = LegalExpertAgent()
@@ -246,7 +248,7 @@ with open("results.json", "w", encoding="utf-8") as f:
 
 ```
 LegalTechKZ/
-├── anus/
+├── legaltechkz/
 │   ├── tools/
 │   │   ├── adilet_search.py          # Поиск на adilet.zan.kz
 │   │   └── legal_analysis.py          # Инструменты анализа НПА

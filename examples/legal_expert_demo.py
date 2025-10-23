@@ -17,16 +17,16 @@ import os
 import json
 from datetime import datetime
 
-# Добавляем путь к модулям anus
+# Добавляем путь к модулям legaltechkz
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from anus.tools.adilet_search import AdiletSearchTool, AdiletDocumentFetcher
-from anus.tools.legal_analysis import (
+from legaltechkz.tools.adilet_search import AdiletSearchTool, AdiletDocumentFetcher
+from legaltechkz.tools.legal_analysis import (
     LegalConsistencyChecker,
     LegalContradictionDetector,
     LegalReferenceValidator
 )
-from anus.agents.legal_expert_agent import LegalExpertAgent
+from legaltechkz.agents.legal_expert_agent import LegalExpertAgent
 
 
 def print_header(text):
