@@ -463,7 +463,7 @@ git push origin feature/amazing-feature
 
 ## 📞 Контакты и поддержка
 
-- 📧 Email: [создайте Issue для вопросов]
+- 📧 Email: tymakbaevabai@gmail.com
 - 🐛 Bugs: [GitHub Issues](https://github.com/tymakbayev/LegalTechKZ/issues)
 - 💬 Обсуждения: [GitHub Discussions](https://github.com/tymakbayev/LegalTechKZ/discussions)
 
@@ -471,7 +471,7 @@ git push origin feature/amazing-feature
 
 - Фреймворк [ANUS AI](https://github.com/nikmcfly/ANUS) - основа системы
 - [adilet.zan.kz](https://adilet.zan.kz) - официальный источник НПА РК
-- Сообщество LegalTech
+- ТОО "Институт Государственного Управления и Права"
 
 ## ⚠️ Дисклеймер
 
