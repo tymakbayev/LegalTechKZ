@@ -4,6 +4,9 @@ beautifulsoup4>=4.12.0
 pyyaml>=6.0
 lxml>=4.9.0
 
+# Environment variables support
+python-dotenv>=1.0.0       # Load API keys from .env file
+
 # LLM providers (updated 2025)
 openai>=2.6.0              # GPT-4.1 support
 anthropic>=0.71.0          # Claude Sonnet 4.5 support
