@@ -9,6 +9,7 @@ from legaltechkz.models.base.base_model import BaseModel
 from legaltechkz.models.openai_model import OpenAIModel
 from legaltechkz.models.anthropic_model import AnthropicModel
 from legaltechkz.models.gemini_model import GeminiModel
+from legaltechkz.models.task_classifier import TaskClassifier
 
 class ModelRouter:
     """
@@ -20,12 +21,17 @@ class ModelRouter:
     - Fallback mechanisms for reliability
     """
     
-    def __init__(self, default_model_config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        default_model_config: Optional[Dict[str, Any]] = None,
+        enable_auto_selection: bool = True
+    ):
         """
         Initialize a ModelRouter instance.
-        
+
         Args:
             default_model_config: Configuration for the default model.
+            enable_auto_selection: Enable automatic model selection based on task.
         """
         self.models: Dict[str, BaseModel] = {}
         self.model_classes: Dict[str, Type[BaseModel]] = {
@@ -40,6 +46,13 @@ class ModelRouter:
             "temperature": 0.0
         }
         self.default_model = None
+        self.enable_auto_selection = enable_auto_selection
+        self.task_classifier = TaskClassifier(
+            default_model=self.default_model_config.get("model_name", "gpt-4.1")
+        )
+
+        if enable_auto_selection:
+            logging.info("Automatic model selection enabled")
     
     def register_model(self, name: str, model: BaseModel) -> None:
         """
@@ -104,23 +117,101 @@ class ModelRouter:
         
         return self.default_model
     
-    def select_model_for_task(self, task: str, requirements: Dict[str, Any] = None) -> BaseModel:
+    def select_model_for_task(
+        self,
+        task: str,
+        context: Optional[str] = None,
+        requirements: Optional[Dict[str, Any]] = None,
+        user_preference: Optional[str] = None
+    ) -> BaseModel:
         """
         Select an appropriate model for a given task.
-        
+
+        Uses TaskClassifier to automatically determine the best model based on:
+        - Context size (token count)
+        - Task type (reasoning, document processing, quick response)
+        - User preferences
+
         Args:
-            task: The task description.
-            requirements: Optional requirements for the model.
-            
+            task: The task description/prompt.
+            context: Additional context (e.g., document content).
+            requirements: Optional requirements for the model (overrides auto-selection).
+            user_preference: User's preferred model name (highest priority).
+
         Returns:
             The selected model instance.
         """
-        # Simple implementation: just use requirements if provided
+        # Priority 1: Explicit requirements config
         if requirements:
+            logging.info("Using explicit model requirements")
             return self._create_model_from_config(requirements)
-        
-        # Default to the default model
+
+        # Priority 2: Auto-selection if enabled
+        if self.enable_auto_selection:
+            # Use task classifier to determine best model
+            classification = self.task_classifier.classify_task(
+                prompt=task,
+                context=context,
+                user_preference=user_preference
+            )
+
+            model_name = classification["model"]
+            provider = classification["provider"]
+            reason = classification["reason"]
+
+            logging.info(
+                f"Auto-selected {model_name} ({provider}) - {reason}"
+            )
+
+            # Create model config from classification
+            model_config = {
+                "provider": provider,
+                "model_name": model_name,
+                "temperature": 0.1
+            }
+
+            return self._create_model_from_config(model_config)
+
+        # Priority 3: Default model
+        logging.info("Using default model")
         return self.get_default_model()
+
+    def select_model_for_pipeline_stage(
+        self,
+        stage: str,
+        previous_output: Optional[str] = None
+    ) -> BaseModel:
+        """
+        Select model for a specific pipeline stage.
+
+        Pipeline stages:
+        - document_processing: Large document ingestion (Gemini 2.5 Flash)
+        - analysis: Deep reasoning and analysis (Claude Sonnet 4.5)
+        - summarization: Quick response generation (GPT-4.1)
+
+        Args:
+            stage: Pipeline stage name.
+            previous_output: Output from previous stage.
+
+        Returns:
+            Model instance for the stage.
+        """
+        selection = self.task_classifier.select_for_pipeline(
+            stage=stage,
+            previous_output=previous_output
+        )
+
+        model_config = {
+            "provider": selection["provider"],
+            "model_name": selection["model"],
+            "temperature": 0.1
+        }
+
+        logging.info(
+            f"Pipeline stage '{stage}' using {selection['model']}"
+        )
+
+        return self._create_model_from_config(model_config)
     
     def _create_model_from_config(self, config: Dict[str, Any]) -> BaseModel:
         """
