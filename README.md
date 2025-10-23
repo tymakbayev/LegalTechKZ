@@ -95,10 +95,11 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .
 
-# Настройка API ключа
+# Настройка API ключей (подробнее см. docs/API_KEYS_SETUP.md)
 export OPENAI_API_KEY="ваш_ключ_openai"
-# или
+export OPENAI_ORG_ID="org-..."  # Опционально, если у вас корпоративный аккаунт
 export ANTHROPIC_API_KEY="ваш_ключ_anthropic"
+export GOOGLE_API_KEY="ваш_ключ_google"
 ```
 
 ### Первый запуск

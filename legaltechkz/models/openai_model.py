@@ -24,42 +24,54 @@ class OpenAIModel(BaseModel):
     """
     
     def __init__(
-        self, 
-        model_name: str = "gpt-4", 
+        self,
+        model_name: str = "gpt-4",
         temperature: float = 0.0,
         max_tokens: Optional[int] = None,
         api_key: Optional[str] = None,
+        organization: Optional[str] = None,
         base_url: Optional[str] = None,
         **kwargs
     ):
         """
         Initialize an OpenAIModel instance.
-        
+
         Args:
             model_name: The name of the OpenAI model to use.
             temperature: Controls randomness in outputs. Lower values are more deterministic.
             max_tokens: Maximum number of tokens to generate.
             api_key: OpenAI API key. If None, it will be read from the OPENAI_API_KEY environment variable.
+            organization: OpenAI organization ID. If None, it will be read from the OPENAI_ORG_ID environment variable.
             base_url: Base URL for the OpenAI API. Useful for proxies or non-standard endpoints.
             **kwargs: Additional model-specific parameters.
         """
         super().__init__(model_name, temperature, max_tokens, **kwargs)
-        
+
         if not OPENAI_AVAILABLE:
             logging.error("OpenAI package not installed. Please install it with 'pip install openai'.")
             raise ImportError("OpenAI package not installed")
-        
+
         # Use provided API key or read from environment
         self.api_key = api_key or os.environ.get("OPENAI_API_KEY")
         if not self.api_key:
             logging.error("OpenAI API key not provided and not found in environment.")
             raise ValueError("OpenAI API key required")
-        
+
+        # Use provided organization or read from environment (optional)
+        self.organization = organization or os.environ.get("OPENAI_ORG_ID")
+
         self.base_url = base_url
-        
-        # Initialize client
-        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
-        
+
+        # Initialize client with organization if provided
+        client_kwargs = {"api_key": self.api_key}
+        if self.organization:
+            client_kwargs["organization"] = self.organization
+            logging.info(f"Using OpenAI organization: {self.organization}")
+        if self.base_url:
+            client_kwargs["base_url"] = self.base_url
+
+        self.client = OpenAI(**client_kwargs)
+
         # Set default embedding model
         self.embedding_model = kwargs.get("embedding_model", "text-embedding-ada-002")
     
