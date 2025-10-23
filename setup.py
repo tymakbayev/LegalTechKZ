@@ -25,13 +25,14 @@ setup(
         "Intended Audience :: Legal Industry",
         "Topic :: Legal :: Analysis",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Natural Language :: Russian",
     ],
-    python_requires=">=3.11",
+    python_requires=">=3.10",
     install_requires=requirements,
     entry_points={
         "console_scripts": [
