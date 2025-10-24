@@ -5,6 +5,8 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 from legaltechkz.expertise.document_parser import DocumentFragment
 from legaltechkz.models.base.base_model import BaseModel
@@ -123,41 +125,94 @@ class BaseExpertAgent(ABC):
         self,
         fragments: List[DocumentFragment],
         checklist: str,
-        batch_size: int = 5
+        batch_size: int = 5,
+        max_workers: int = 3
     ) -> List[Dict[str, Any]]:
         """
-        Проанализировать несколько фрагментов группами для оптимизации.
+        Проанализировать несколько фрагментов группами с параллельной обработкой.
 
         Args:
             fragments: Список фрагментов.
             checklist: Оглавление-чеклист.
             batch_size: Количество фрагментов для группового анализа (по умолчанию 5).
+            max_workers: Количество параллельных потоков (по умолчанию 3).
 
         Returns:
             Список результатов анализа.
         """
         total = len(fragments)
-        logger.info(f"[{self.agent_name}] Начало batch-анализа: {total} фрагментов (группами по {batch_size})")
+        total_batches = (total + batch_size - 1) // batch_size
 
-        results = []
+        logger.info(f"[{self.agent_name}] Начало ПАРАЛЛЕЛЬНОГО batch-анализа:")
+        logger.info(f"[{self.agent_name}]   Фрагментов: {total}")
+        logger.info(f"[{self.agent_name}]   Размер группы: {batch_size}")
+        logger.info(f"[{self.agent_name}]   Групп: {total_batches}")
+        logger.info(f"[{self.agent_name}]   Параллельных потоков: {max_workers}")
 
-        # Группируем фрагменты для эффективного анализа
+        # Создаем группы фрагментов
+        batches = []
         for i in range(0, total, batch_size):
             batch = fragments[i:i + batch_size]
             batch_num = (i // batch_size) + 1
-            total_batches = (total + batch_size - 1) // batch_size
+            batches.append((batch_num, batch))
 
-            logger.info(f"[{self.agent_name}] Обработка группы {batch_num}/{total_batches} ({len(batch)} статей)...")
+        results = []
+        start_time = time.time()
 
-            # Групповой анализ
-            batch_results = self.analyze_fragment_group(batch, checklist)
-            results.extend(batch_results)
+        # Параллельная обработка групп
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Запускаем все группы параллельно
+            future_to_batch = {
+                executor.submit(self._analyze_batch_with_logging, batch_num, batch, checklist, total_batches): batch_num
+                for batch_num, batch in batches
+            }
 
-            logger.info(f"[{self.agent_name}] Группа {batch_num}/{total_batches} завершена")
+            # Собираем результаты по мере выполнения
+            for future in as_completed(future_to_batch):
+                batch_num = future_to_batch[future]
+                try:
+                    batch_results = future.result()
+                    results.extend(batch_results)
+                except Exception as e:
+                    logger.error(f"[{self.agent_name}] Ошибка в группе {batch_num}: {e}")
 
-        logger.info(f"[{self.agent_name}] Batch-анализ завершён: {len(results)} результатов")
+        elapsed = time.time() - start_time
+
+        logger.info(f"[{self.agent_name}] Batch-анализ завершён:")
+        logger.info(f"[{self.agent_name}]   Результатов: {len(results)}/{total}")
+        logger.info(f"[{self.agent_name}]   Время: {elapsed:.1f} сек")
+        logger.info(f"[{self.agent_name}]   Скорость: {total/elapsed:.1f} фрагментов/сек")
 
         return results
+
+    def _analyze_batch_with_logging(
+        self,
+        batch_num: int,
+        batch: List[DocumentFragment],
+        checklist: str,
+        total_batches: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Вспомогательный метод для анализа группы с логированием (для параллельного выполнения).
+
+        Args:
+            batch_num: Номер группы
+            batch: Фрагменты для анализа
+            checklist: Чеклист
+            total_batches: Всего групп
+
+        Returns:
+            Результаты анализа группы
+        """
+        logger.info(f"[{self.agent_name}] 🔄 Группа {batch_num}/{total_batches}: началась ({len(batch)} статей)")
+
+        batch_start = time.time()
+        batch_results = self.analyze_fragment_group(batch, checklist)
+        batch_time = time.time() - batch_start
+
+        logger.info(f"[{self.agent_name}] ✅ Группа {batch_num}/{total_batches}: завершена ({batch_time:.1f} сек)")
+
+        return batch_results
 
     def analyze_fragment_group(
         self,
