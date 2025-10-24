@@ -66,6 +66,9 @@ class AdiletSearchTool(BaseTool):
     BASE_URL = "https://adilet.zan.kz"
     SEARCH_URL = f"{BASE_URL}/rus/search/docs"
 
+    # Примечание: adilet.zan.kz использует параметр 'fulltext' для поиска
+    # Результаты возвращаются в выпадающем списке (select/option элементы)
+
     # Типы документов на adilet.zan.kz
     DOC_TYPES = {
         "law": "Закон",
@@ -221,24 +224,21 @@ class AdiletSearchTool(BaseTool):
         Returns:
             Словарь с параметрами поиска
         """
+        # adilet.zan.kz использует параметр 'fulltext' для полнотекстового поиска
         params = {
-            "q": query,
-            "lang": "ru"
+            "fulltext": query
         }
 
-        # Добавляем тип документа
+        # Добавляем тип документа в поисковый запрос
         if doc_type != "all" and doc_type in self.DOC_TYPES:
-            params["type"] = self.DOC_TYPES[doc_type]
+            params["fulltext"] = f"{query} {self.DOC_TYPES[doc_type]}"
 
-        # Добавляем год
+        # Добавляем год в поисковый запрос
         if year:
-            params["year"] = year
+            params["fulltext"] = f"{params['fulltext']} {year}"
 
-        # Добавляем статус
-        if status == "active":
-            params["valid"] = "1"
-        elif status == "invalid":
-            params["valid"] = "0"
+        # Статус фильтруется после получения результатов
+        params["_status_filter"] = status
 
         return params
 
@@ -499,7 +499,17 @@ class AdiletSearchTool(BaseTool):
                 return []
 
             response.raise_for_status()
-            results = self._parse_search_results(response.text)
+
+            # Извлекаем фильтр статуса для парсинга
+            status_filter = params.get("_status_filter")
+            if status_filter == "active":
+                status_filter = "1"
+            elif status_filter == "invalid":
+                status_filter = "0"
+            else:
+                status_filter = None
+
+            results = self._parse_search_results(response.text, status_filter)
 
             if results:
                 logger.info(f"Прямой поиск нашел {len(results)} документов")
@@ -520,12 +530,15 @@ class AdiletSearchTool(BaseTool):
             logger.error(f"Ошибка прямого поиска: {e}")
             return []
 
-    def _parse_search_results(self, html: str) -> List[Dict[str, Any]]:
+    def _parse_search_results(self, html: str, status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        Распарсить HTML результаты поиска
+        Распарсить HTML результаты поиска из adilet.zan.kz
+
+        Результаты поиска возвращаются в выпадающем списке (select/option элементы)
 
         Args:
             html: HTML страницы с результатами
+            status_filter: Фильтр по статусу документа
 
         Returns:
             Список документов
@@ -534,36 +547,66 @@ class AdiletSearchTool(BaseTool):
             soup = BeautifulSoup(html, 'html.parser')
             results = []
 
-            # Ищем различные варианты структуры результатов adilet.zan.kz
-            search_items = (
-                soup.find_all('div', class_='search-result-item') or
-                soup.find_all('div', class_='document-item') or
-                soup.find_all('div', class_='doc-item') or
-                soup.find_all('tr', class_='document-row') or
-                soup.find_all('li', class_='result')
-            )
+            # adilet.zan.kz возвращает результаты в выпадающем списке (select/option)
+            logger.info("Ищем результаты в select/option элементах...")
 
-            # Если не нашли специфичные классы, ищем все ссылки на документы
-            if not search_items:
-                logger.info("Не нашли специфичные элементы, ищем ссылки на документы")
-                # Ищем все ссылки которые ведут на /rus/docs/
+            # Ищем все select элементы на странице
+            select_elements = soup.find_all('select')
+            logger.info(f"Найдено select элементов: {len(select_elements)}")
+
+            for select in select_elements:
+                # Ищем опции в выпадающем списке
+                options = select.find_all('option')
+
+                # Пропускаем пустые или placeholder опции
+                for option in options:
+                    value = option.get('value', '').strip()
+                    text = option.get_text(strip=True)
+
+                    # Пропускаем пустые опции и placeholder'ы
+                    if not value or not text or value == '' or value == '0':
+                        continue
+
+                    # Опции содержат информацию о документе в тексте
+                    # Формат примерно: "Налоговый кодекс РК от 25.12.2017 № 120-VI ҚР ЗРК"
+                    logger.debug(f"Обработка опции: {text[:100]}")
+
+                    # Извлекаем информацию из текста опции
+                    doc_info = self._parse_option_text(text, value)
+
+                    if doc_info:
+                        # Применяем фильтр по статусу если указан
+                        if status_filter:
+                            doc_status = doc_info.get('status', '')
+                            if status_filter == '1' and 'Утратил' in doc_status:
+                                continue
+                            elif status_filter == '0' and 'Действует' in doc_status:
+                                continue
+
+                        results.append(doc_info)
+
+                        # Ограничиваем 10 результатами
+                        if len(results) >= 10:
+                            break
+
+                # Если нашли результаты, прекращаем поиск по другим select
+                if results:
+                    break
+
+            # Если не нашли результаты в select, пробуем старый метод (ссылки)
+            if not results:
+                logger.info("Результаты в select не найдены, ищем ссылки на документы...")
                 links = soup.find_all('a', href=re.compile(r'/rus/docs/[A-Z]'))
                 logger.info(f"Найдено ссылок на документы: {len(links)}")
 
                 seen_urls = set()
-                for link in links[:20]:  # Проверяем до 20 ссылок
+                for link in links[:20]:
                     doc_info = self._extract_from_link(link)
                     if doc_info and doc_info['url'] not in seen_urls:
                         results.append(doc_info)
                         seen_urls.add(doc_info['url'])
-                        if len(results) >= 10:  # Ограничиваем 10 результатами
+                        if len(results) >= 10:
                             break
-            else:
-                logger.info(f"Найдено элементов результатов: {len(search_items)}")
-                for item in search_items[:10]:  # Ограничиваем 10 результатами
-                    doc_info = self._extract_document_info(item)
-                    if doc_info:
-                        results.append(doc_info)
 
             logger.info(f"Найдено документов после парсинга: {len(results)}")
             return results
@@ -573,6 +616,56 @@ class AdiletSearchTool(BaseTool):
             import traceback
             logger.error(traceback.format_exc())
             return []
+
+    def _parse_option_text(self, text: str, value: str) -> Optional[Dict[str, Any]]:
+        """
+        Извлечь информацию о документе из текста option элемента
+
+        Args:
+            text: Текст опции (например, "Налоговый кодекс РК от 25.12.2017 № 120-VI")
+            value: Значение опции (обычно ID или код документа)
+
+        Returns:
+            Словарь с информацией о документе или None
+        """
+        try:
+            # Извлекаем номер документа
+            doc_number = self._extract_doc_number(text)
+
+            # Извлекаем дату
+            doc_date = self._extract_date_from_text(text)
+
+            # Определяем статус
+            if "утратил" in text.lower() or "недействующ" in text.lower():
+                status = "Утратил силу"
+            else:
+                status = "Действует"
+
+            # Формируем URL документа
+            # value обычно содержит идентификатор документа
+            if value and value.startswith('http'):
+                url = value
+            elif value:
+                # Пробуем построить URL из value
+                url = f"{self.BASE_URL}/rus/docs/{value}"
+            else:
+                url = None
+
+            # Название = весь текст (очищенный)
+            title = text.strip()
+
+            return {
+                "title": title,
+                "url": url or f"{self.BASE_URL}/rus/docs/{value}" if value else "Не указан",
+                "number": doc_number or value or "Не указан",
+                "date": doc_date or "Не указана",
+                "status": status,
+                "source": "adilet.zan.kz (прямой поиск)"
+            }
+
+        except Exception as e:
+            logger.error(f"Ошибка парсинга текста опции: {e}")
+            return None
 
     def _extract_document_info(self, item) -> Optional[Dict[str, Any]]:
         """
