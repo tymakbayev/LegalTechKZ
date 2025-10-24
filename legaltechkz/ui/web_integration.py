@@ -303,8 +303,22 @@ class WebExpertiseController:
             # Генерация чеклиста
             checklist = self.validator.generate_checklist_text()
 
-            # Выбор модели для анализа
-            model = self.model_router.select_model_for_pipeline_stage("analysis")
+            # Оценка размера контента для выбора модели
+            total_chars = sum(len(article.text) for article in articles)
+            estimated_tokens = total_chars // 2  # Для русского текста ~2 символа на токен
+
+            # Выбор модели: Gemini для больших объемов, Claude для средних/малых
+            # Как указал пользователь: Gemini берет большие тексты, Claude "раскладывает по полочкам"
+            if estimated_tokens > 50_000:
+                # Большой объем (>50K токенов) - используем Gemini
+                pipeline_stage = "document_processing"
+                self.logger.info(f"Большой объем данных ({estimated_tokens} токенов) - используем Gemini для начальной обработки")
+            else:
+                # Средний/малый объем - используем Claude для детального анализа
+                pipeline_stage = "analysis"
+                self.logger.info(f"Умеренный объем данных ({estimated_tokens} токенов) - используем Claude для детального анализа")
+
+            model = self.model_router.select_model_for_pipeline_stage(pipeline_stage)
 
             # Создание агента в зависимости от этапа
             agent_map = {

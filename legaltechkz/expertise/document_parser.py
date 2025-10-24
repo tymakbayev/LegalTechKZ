@@ -206,23 +206,41 @@ class NPADocumentParser:
             Полный текст статьи.
         """
         article_lines = [lines[start_line].strip()]
+        empty_line_count = 0
+        max_empty_lines = 2  # Максимум 2 пустые строки подряд - тогда считаем что статья закончилась
 
-        # Собираем следующие строки до новой статьи/пункта
+        # Собираем следующие строки до новой статьи/главы
         for i in range(start_line + 1, len(lines)):
             line = lines[i].strip()
 
-            if not line:
-                break
-
-            # Если встретили новую статью или пункт - останавливаемся
+            # Если встретили новую статью, главу или пункт - останавливаемся
             if (self._match_pattern(line, 'article') or
                 self._match_pattern(line, 'paragraph') or
                 self._match_pattern(line, 'chapter')):
                 break
 
-            article_lines.append(line)
+            # Пустая строка - считаем подряд
+            if not line:
+                empty_line_count += 1
+                # Если слишком много пустых строк подряд - вероятно конец статьи
+                if empty_line_count >= max_empty_lines:
+                    break
+                continue
+            else:
+                # Непустая строка - сбрасываем счетчик и добавляем текст
+                empty_line_count = 0
+                article_lines.append(line)
 
-        return ' '.join(article_lines)
+        # Убираем пустые элементы в конце
+        while article_lines and not article_lines[-1]:
+            article_lines.pop()
+
+        result_text = ' '.join(article_lines)
+
+        # Логируем для отладки
+        logger.debug(f"Собран текст статьи (строка {start_line}): {len(result_text)} символов")
+
+        return result_text
 
     def _count_by_type(self, element_type: str) -> int:
         """Подсчитать количество элементов определённого типа."""
