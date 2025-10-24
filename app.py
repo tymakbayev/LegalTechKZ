@@ -488,7 +488,8 @@ def render_analysis_page():
                     "prompt_caching": use_prompt_caching,
                     "grounding": use_grounding,
                     "structured_output": structured_output
-                }
+                },
+                use_react_agents=use_react_agents
             )
 
 
@@ -496,7 +497,8 @@ def run_expertise_analysis(
     document_text: str,
     document_metadata: Dict[str, str],
     stages: Dict[str, bool],
-    options: Dict[str, bool]
+    options: Dict[str, bool],
+    use_react_agents: bool = True
 ):
     """Запуск анализа документа с использованием WebExpertiseController."""
 
