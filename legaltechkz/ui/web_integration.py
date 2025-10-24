@@ -15,6 +15,14 @@ import json
 
 from legaltechkz.expertise.document_parser import NPADocumentParser, DocumentFragment
 from legaltechkz.expertise.completeness_validator import CompletenessValidator
+from legaltechkz.expertise.expert_agents import (
+    RelevanceFilterAgent,
+    ConstitutionalityFilterAgent,
+    SystemIntegrationFilterAgent,
+    LegalTechnicalExpertAgent,
+    AntiCorruptionExpertAgent,
+    GenderExpertAgent
+)
 from legaltechkz.models.model_router import ModelRouter
 
 
@@ -256,7 +264,7 @@ class WebExpertiseController:
         options: Dict[str, bool]
     ) -> StageResult:
         """
-        Выполнение одного этапа экспертизы.
+        Выполнение одного этапа экспертизы с реальными агентами.
 
         Args:
             stage_key: Ключ этапа
@@ -268,66 +276,121 @@ class WebExpertiseController:
             Результат этапа
         """
         try:
-            # TODO: Интеграция с реальными экспертными агентами
-            # Сейчас используем заглушки для демонстрации
-
             articles = [f for f in self.fragments if f.type == "article"]
 
-            # Имитация анализа
-            issues_count = 0
+            if not articles:
+                self.logger.warning(f"Нет статей для анализа на этапе '{stage_name}'")
+                return StageResult(
+                    stage_name=stage_name,
+                    stage_number=stage_number,
+                    status="warning",
+                    articles_analyzed=0,
+                    issues_found=0,
+                    recommendations=["Статьи для анализа не найдены"],
+                    detailed_results={},
+                    processing_time=0.0
+                )
+
+            # Генерация чеклиста
+            checklist = self.validator.generate_checklist_text()
+
+            # Выбор модели для анализа
+            model = self.model_router.select_model_for_pipeline_stage("analysis")
+
+            # Создание агента в зависимости от этапа
+            agent_map = {
+                "relevance": RelevanceFilterAgent,
+                "constitutionality": ConstitutionalityFilterAgent,
+                "system_integration": SystemIntegrationFilterAgent,
+                "legal_technical": LegalTechnicalExpertAgent,
+                "anti_corruption": AntiCorruptionExpertAgent,
+                "gender": GenderExpertAgent
+            }
+
+            agent_class = agent_map.get(stage_key)
+            if not agent_class:
+                raise ValueError(f"Неизвестный тип этапа: {stage_key}")
+
+            # Инициализация агента
+            agent = agent_class(model)
+
+            self.logger.info(f"Запуск этапа '{stage_name}' с агентом {agent.agent_name}")
+            self.logger.info(f"Модель: {model.model_name}, Статей для анализа: {len(articles)}")
+
+            # Выполнение batch-анализа
+            results = agent.analyze_batch(articles, checklist)
+
+            # Обработка результатов
+            successful_analyses = [r for r in results if r.get('success', False)]
+            failed_analyses = [r for r in results if not r.get('success', False)]
+
+            # Помечаем проанализированные статьи в валидаторе
+            for result in successful_analyses:
+                self.validator.mark_analyzed(
+                    result['fragment_number'],
+                    result
+                )
+
+            # Извлекаем рекомендации и проблемы из анализа
             recommendations = []
+            issues_count = 0
 
-            # Специфичные результаты для каждого этапа
-            if stage_key == "relevance":
-                issues_count = 0
-                recommendations.append("Все нормы имеют нормативный характер")
+            for result in successful_analyses:
+                analysis_text = result.get('analysis', '')
 
-            elif stage_key == "constitutionality":
-                issues_count = 0
-                recommendations.append("Противоречий с Конституцией РК не выявлено")
+                # Простой подсчет проблем/рекомендаций (можно улучшить парсингом)
+                if 'проблем' in analysis_text.lower() or 'issue' in analysis_text.lower():
+                    issues_count += 1
 
-            elif stage_key == "system_integration":
-                issues_count = 1
-                recommendations.append("Обнаружена потенциальная коллизия со ст. 45 ГК РК")
-                recommendations.append("Рекомендуется уточнить формулировку")
+                # Извлекаем первые 200 символов как рекомендацию
+                if analysis_text:
+                    summary = analysis_text[:200] + "..." if len(analysis_text) > 200 else analysis_text
+                    recommendations.append(f"Статья {result['fragment_number']}: {summary}")
 
-            elif stage_key == "legal_technical":
-                issues_count = 2
-                recommendations.append("Использовать единообразную терминологию")
-                recommendations.append("Уточнить определение термина 'уполномоченный орган'")
+            # Если анализов не было, добавляем общую рекомендацию
+            if not recommendations:
+                recommendations.append(f"Проанализировано {len(successful_analyses)} статей")
 
-            elif stage_key == "anti_corruption":
-                issues_count = 1
-                recommendations.append("Сузить дискреционные полномочия в ст. 12")
+            # Определение статуса этапа
+            if len(failed_analyses) > 0:
+                status = "warning"
+            elif issues_count > 0:
+                status = "warning"
+            else:
+                status = "success"
 
-            elif stage_key == "gender":
-                issues_count = 0
-                recommendations.append("Гендерных стереотипов не обнаружено")
+            self.logger.info(f"Этап '{stage_name}' завершен: {len(successful_analyses)}/{len(articles)} успешно")
 
             return StageResult(
                 stage_name=stage_name,
                 stage_number=stage_number,
-                status="success" if issues_count == 0 else "warning",
-                articles_analyzed=len(articles),
+                status=status,
+                articles_analyzed=len(successful_analyses),
                 issues_found=issues_count,
-                recommendations=recommendations,
+                recommendations=recommendations[:5],  # Первые 5 рекомендаций
                 detailed_results={
                     "stage_key": stage_key,
-                    "options_used": options
+                    "options_used": options,
+                    "successful_count": len(successful_analyses),
+                    "failed_count": len(failed_analyses),
+                    "all_results": results  # Полные результаты анализа
                 },
                 processing_time=0.0  # Будет установлено позже
             )
 
         except Exception as e:
             self.logger.error(f"Ошибка выполнения этапа {stage_name}: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+
             return StageResult(
                 stage_name=stage_name,
                 stage_number=stage_number,
                 status="error",
                 articles_analyzed=0,
                 issues_found=0,
-                recommendations=[],
-                detailed_results={"error": str(e)},
+                recommendations=[f"Ошибка: {str(e)}"],
+                detailed_results={"error": str(e), "traceback": traceback.format_exc()},
                 processing_time=0.0
             )
 
