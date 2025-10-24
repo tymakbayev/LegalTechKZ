@@ -18,6 +18,9 @@ from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv()  # Загружает переменные из .env файла в os.environ
 
+# Импорт thinking display компонента
+from legaltechkz.ui.thinking_display import create_thinking_expander, extract_stage_logs
+
 # Добавляем путь к проекту
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -594,6 +597,20 @@ def run_expertise_analysis(
                                 st.markdown(f"- {rec}")
                         else:
                             st.markdown("**Рекомендации:** Нет замечаний")
+
+                    # Thinking display - детальный прогресс обработки
+                    st.markdown("---")
+
+                    # Извлечение логов для данного этапа
+                    log_file = results.get("log_file")
+                    if log_file and os.path.exists(log_file):
+                        try:
+                            stage_logs = extract_stage_logs(log_file, stage_result['stage_name'])
+                            create_thinking_expander(stage_result['stage_name'], stage_logs)
+                        except Exception as e:
+                            st.info(f"Логи обработки недоступны: {e}")
+                    else:
+                        st.info("Логи обработки не найдены")
 
         # Финальный отчет
         progress_bar.progress(1.0)

@@ -90,17 +90,22 @@ def extract_stage_logs(full_log_path: str, stage_name: str) -> str:
 
     with open(full_log_path, 'r', encoding='utf-8') as f:
         for line in f:
-            # Начало этапа
-            if stage_name in line and 'Начало' in line:
+            # Начало этапа - ищем по "Запуск этапа 'название'"
+            if f"Запуск этапа '{stage_name}'" in line:
                 capture = True
+                stage_logs = []  # Очищаем, начинаем с этого этапа
 
             # Собираем строки этапа
             if capture:
                 stage_logs.append(line.rstrip())
 
-            # Конец этапа
-            if stage_name in line and 'завершён' in line:
-                capture = False
+            # Конец этапа - ищем по "завершён" или следующий "Запуск этапа"
+            if capture and ("завершён" in line.lower() or "завершен" in line.lower()):
+                # Продолжаем собирать еще несколько строк после завершения
+                continue
+
+            # Если встретили начало следующего этапа, останавливаемся
+            if capture and "Запуск этапа '" in line and stage_name not in line:
                 break
 
     return '\n'.join(stage_logs)
