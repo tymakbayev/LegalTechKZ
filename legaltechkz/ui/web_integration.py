@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import json
 
+from legaltechkz.utils.logging_config import setup_logging, create_session_log_dir
 from legaltechkz.expertise.document_parser import NPADocumentParser, DocumentFragment
 from legaltechkz.expertise.completeness_validator import CompletenessValidator
 from legaltechkz.expertise.expert_agents import (
@@ -58,12 +59,19 @@ class WebExpertiseController:
 
     def __init__(self):
         """Инициализация контроллера."""
+        # Инициализируем логирование в папку ./logs
+        session_name = f"expertise_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        setup_logging(log_level="INFO", session_name=session_name)
+
         self.parser = NPADocumentParser()
         self.model_router = ModelRouter(enable_auto_selection=True)
         self.validator: Optional[CompletenessValidator] = None
         self.fragments: List[DocumentFragment] = []
+        self.current_log_file = f"logs/{session_name}.log"
 
         self.logger = logging.getLogger(__name__)
+        self.logger.info("WebExpertiseController инициализирован")
+        self.logger.info(f"Логи сохраняются в: {self.current_log_file}")
 
     def parse_document(self, document_text: str) -> Dict[str, Any]:
         """
@@ -243,6 +251,7 @@ class WebExpertiseController:
                     "ready_for_approval": quality_score >= 80 and all_successful,
                     "processing_time": total_duration
                 },
+                "log_file": self.current_log_file,  # Путь к файлу логов
                 "timestamp": datetime.now().isoformat()
             }
 
