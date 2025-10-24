@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from legaltechkz.agents.tools.base_tool import BaseTool
-from legaltechkz.expertise.document_parser import DocumentParser
+from legaltechkz.expertise.document_parser import NPADocumentParser
 
 logger = logging.getLogger("legaltechkz.agents.tools.document_fetch")
 
@@ -25,7 +25,7 @@ class DocumentFetchTool(BaseTool):
 
     def __init__(self):
         """Инициализация инструмента."""
-        self.parser = DocumentParser()
+        self.parser = NPADocumentParser()
         self.session = requests.Session()
         super().__init__()
 
@@ -83,11 +83,15 @@ class DocumentFetchTool(BaseTool):
             full_text = content_div.get_text(separator='\n', strip=True)
 
             # Парсим структуру
-            parsed = self.parser.parse_document(full_text, title)
+            fragments = self.parser.parse(full_text)
+
+            # Подсчитываем статьи
+            articles = [f for f in fragments if f.type == "article"]
+            articles_count = len(articles)
 
             # Если запрошена конкретная статья
             if article_number is not None:
-                article = self._find_article(parsed['fragments'], article_number)
+                article = self._find_article(fragments, article_number)
                 if article:
                     logger.info(f"✅ Извлечена статья {article_number}")
                     return {
@@ -106,18 +110,21 @@ class DocumentFetchTool(BaseTool):
                         "message": f"Статья {article_number} не найдена в документе"
                     }
 
+            # Формируем оглавление
+            table_of_contents = "\n".join([f.full_path for f in fragments[:50]])  # Первые 50 элементов
+
             # Возвращаем весь документ
-            logger.info(f"✅ Загружен документ: {parsed['articles_count']} статей")
+            logger.info(f"✅ Загружен документ: {articles_count} статей")
 
             return {
                 "success": True,
                 "url": url,
                 "title": title,
-                "articles_count": parsed['articles_count'],
-                "fragments_count": parsed['fragments_count'],
-                "fragments": parsed['fragments'][:10],  # Первые 10 фрагментов
-                "table_of_contents": parsed['table_of_contents'][:1000],  # Первые 1000 символов оглавления
-                "message": f"Загружен документ '{title}': {parsed['articles_count']} статей"
+                "articles_count": articles_count,
+                "fragments_count": len(fragments),
+                "fragments": fragments[:10],  # Первые 10 фрагментов
+                "table_of_contents": table_of_contents[:1000],  # Первые 1000 символов оглавления
+                "message": f"Загружен документ '{title}': {articles_count} статей"
             }
 
         except Exception as e:
