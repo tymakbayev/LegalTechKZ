@@ -432,6 +432,14 @@ def render_analysis_page():
     with col2:
         st.markdown("**Параметры модели:**")
 
+        use_react_agents = st.checkbox(
+            "🧠 ReAct Agents (НОВОЕ!)",
+            value=True,
+            help="Использовать автономных агентов с циклом Thought→Action→Observation. "
+                 "Агенты сами ищут документы, извлекают ссылки, загружают НПА и формируют обоснованные заключения. "
+                 "Как deep research у Claude/Google!"
+        )
+
         use_extended_thinking = st.checkbox(
             "Extended Thinking",
             value=True,
@@ -510,7 +518,7 @@ def run_expertise_analysis(
         # Импорт контроллера
         from legaltechkz.ui.web_integration import get_controller
 
-        controller = get_controller()
+        controller = get_controller(use_react_agents=use_react_agents)
 
         # Callback для обновления прогресса
         def update_progress(progress_info):

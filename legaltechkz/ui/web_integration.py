@@ -24,6 +24,8 @@ from legaltechkz.expertise.expert_agents import (
     AntiCorruptionExpertAgent,
     GenderExpertAgent
 )
+# ReAct агенты - новая архитектура с автономным мышлением
+from legaltechkz.agents.constitutionality_react_agent import ConstitutionalityReActAgent
 from legaltechkz.models.model_router import ModelRouter
 
 
@@ -57,8 +59,13 @@ class WebExpertiseController:
     Контроллер для управления процессом экспертизы из web-интерфейса.
     """
 
-    def __init__(self):
-        """Инициализация контроллера."""
+    def __init__(self, use_react_agents: bool = True):
+        """
+        Инициализация контроллера.
+
+        Args:
+            use_react_agents: Использовать ReAct агентов (True) или старых batch агентов (False)
+        """
         # Инициализируем логирование в папку ./logs
         session_name = f"expertise_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         setup_logging(log_level="INFO", session_name=session_name)
@@ -68,9 +75,11 @@ class WebExpertiseController:
         self.validator: Optional[CompletenessValidator] = None
         self.fragments: List[DocumentFragment] = []
         self.current_log_file = f"logs/{session_name}.log"
+        self.use_react_agents = use_react_agents
 
         self.logger = logging.getLogger(__name__)
         self.logger.info("WebExpertiseController инициализирован")
+        self.logger.info(f"Режим агентов: {'ReAct (автономные)' if use_react_agents else 'Batch (простые)'}")
         self.logger.info(f"Логи сохраняются в: {self.current_log_file}")
 
     def parse_document(self, document_text: str) -> Dict[str, Any]:
@@ -320,27 +329,61 @@ class WebExpertiseController:
 
             model = self.model_router.select_model_for_pipeline_stage(pipeline_stage)
 
-            # Создание агента в зависимости от этапа
-            agent_map = {
-                "relevance": RelevanceFilterAgent,
-                "constitutionality": ConstitutionalityFilterAgent,
-                "system_integration": SystemIntegrationFilterAgent,
-                "legal_technical": LegalTechnicalExpertAgent,
-                "anti_corruption": AntiCorruptionExpertAgent,
-                "gender": GenderExpertAgent
-            }
+            # Выбор типа агента: ReAct (автономный) или Batch (простой)
+            if self.use_react_agents:
+                # ReAct агенты - автономное мышление с инструментами
+                react_agent_map = {
+                    "constitutionality": ConstitutionalityReActAgent,
+                    # TODO: Добавить ReAct версии для других этапов
+                    # "relevance": RelevanceReActAgent,
+                    # "system_integration": SystemIntegrationReActAgent,
+                }
 
-            agent_class = agent_map.get(stage_key)
-            if not agent_class:
-                raise ValueError(f"Неизвестный тип этапа: {stage_key}")
+                # Проверяем есть ли ReAct версия для этого этапа
+                if stage_key in react_agent_map:
+                    agent_class = react_agent_map[stage_key]
+                    agent = agent_class(model)
+                    self.logger.info(f"🧠 Запуск ReAct агента для этапа '{stage_name}'")
+                    self.logger.info(f"   Модель: {model.model_name}")
+                    self.logger.info(f"   Статей: {len(articles)}")
+                    self.logger.info(f"   Режим: АВТОНОМНЫЙ (поиск документов, извлечение ссылок, deep research)")
+                else:
+                    # Fallback на batch агента если ReAct версии нет
+                    self.logger.warning(f"⚠️ ReAct версия для '{stage_key}' не реализована, используем Batch агента")
+                    batch_agent_map = {
+                        "relevance": RelevanceFilterAgent,
+                        "constitutionality": ConstitutionalityFilterAgent,
+                        "system_integration": SystemIntegrationFilterAgent,
+                        "legal_technical": LegalTechnicalExpertAgent,
+                        "anti_corruption": AntiCorruptionExpertAgent,
+                        "gender": GenderExpertAgent
+                    }
+                    agent_class = batch_agent_map.get(stage_key)
+                    if not agent_class:
+                        raise ValueError(f"Неизвестный тип этапа: {stage_key}")
+                    agent = agent_class(model)
+                    self.logger.info(f"📦 Запуск Batch агента для этапа '{stage_name}'")
+                    self.logger.info(f"   Модель: {model.model_name}, Статей: {len(articles)}")
+            else:
+                # Старые batch агенты (простой промптинг)
+                batch_agent_map = {
+                    "relevance": RelevanceFilterAgent,
+                    "constitutionality": ConstitutionalityFilterAgent,
+                    "system_integration": SystemIntegrationFilterAgent,
+                    "legal_technical": LegalTechnicalExpertAgent,
+                    "anti_corruption": AntiCorruptionExpertAgent,
+                    "gender": GenderExpertAgent
+                }
 
-            # Инициализация агента
-            agent = agent_class(model)
+                agent_class = batch_agent_map.get(stage_key)
+                if not agent_class:
+                    raise ValueError(f"Неизвестный тип этапа: {stage_key}")
 
-            self.logger.info(f"Запуск этапа '{stage_name}' с агентом {agent.agent_name}")
-            self.logger.info(f"Модель: {model.model_name}, Статей для анализа: {len(articles)}")
+                agent = agent_class(model)
+                self.logger.info(f"📦 Запуск Batch агента для этапа '{stage_name}'")
+                self.logger.info(f"   Модель: {model.model_name}, Статей: {len(articles)}")
 
-            # Выполнение batch-анализа
+            # Выполнение анализа (ReAct или Batch)
             results = agent.analyze_batch(articles, checklist)
 
             # Обработка результатов
@@ -521,9 +564,12 @@ class WebExpertiseController:
 _controller_instance: Optional[WebExpertiseController] = None
 
 
-def get_controller() -> WebExpertiseController:
+def get_controller(use_react_agents: bool = True) -> WebExpertiseController:
     """
     Получить singleton instance контроллера.
+
+    Args:
+        use_react_agents: Использовать ReAct агентов (по умолчанию True)
 
     Returns:
         Instance WebExpertiseController
@@ -531,6 +577,6 @@ def get_controller() -> WebExpertiseController:
     global _controller_instance
 
     if _controller_instance is None:
-        _controller_instance = WebExpertiseController()
+        _controller_instance = WebExpertiseController(use_react_agents=use_react_agents)
 
     return _controller_instance
