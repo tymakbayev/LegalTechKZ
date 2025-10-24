@@ -11,6 +11,10 @@ from typing import Dict, Any, Union, List, Optional
 from bs4 import BeautifulSoup
 import re
 from urllib.parse import urljoin, quote
+import urllib3
+
+# Отключаем предупреждения о непроверенных HTTPS запросах для adilet.zan.kz
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from legaltechkz.tools.base.tool import BaseTool
 from legaltechkz.tools.base.tool_result import ToolResult
@@ -96,7 +100,8 @@ class AdiletSearchTool(BaseTool):
         """Инициализировать сессию, посетив главную страницу adilet.zan.kz"""
         try:
             logger.info("Инициализация сессии с adilet.zan.kz")
-            response = self.session.get(f"{self.BASE_URL}/rus", timeout=10)
+            # verify=False для обхода проблем с SSL сертификатом adilet.zan.kz
+            response = self.session.get(f"{self.BASE_URL}/rus", timeout=10, verify=False)
             if response.status_code == 200:
                 logger.info("Сессия успешно инициализирована")
                 # Сохраняем cookies для последующих запросов
@@ -140,12 +145,32 @@ class AdiletSearchTool(BaseTool):
 
             if not results:
                 logger.warning(f"Документы не найдены по запросу: {query}")
+
+                # Проверяем настроен ли Google Custom Search API
+                google_api_key = os.environ.get("GOOGLE_CUSTOM_SEARCH_API_KEY")
+                google_cx = os.environ.get("GOOGLE_CUSTOM_SEARCH_CX")
+
+                if not google_api_key or not google_cx:
+                    message = (
+                        "⚠️ Документы не найдены. Возможная причина: сайт adilet.zan.kz блокирует автоматические запросы.\n\n"
+                        "💡 РЕШЕНИЕ: Настройте Google Custom Search API для стабильного поиска:\n"
+                        "1. Создайте Custom Search Engine: https://programmablesearchengine.google.com/\n"
+                        "2. Получите API ключ: https://console.cloud.google.com/apis/credentials\n"
+                        "3. Добавьте в .env файл:\n"
+                        "   GOOGLE_CUSTOM_SEARCH_API_KEY=ваш_ключ\n"
+                        "   GOOGLE_CUSTOM_SEARCH_CX=ваш_search_engine_id\n\n"
+                        "📖 Подробная инструкция: docs/GOOGLE_CUSTOM_SEARCH_SETUP.md\n"
+                        "🎁 Бесплатно: 100 запросов в день"
+                    )
+                else:
+                    message = "Документы не найдены. Попробуйте изменить параметры поиска или использовать другие ключевые слова."
+
                 return {
                     "status": "success",
                     "query": query,
                     "results": [],
                     "result_count": 0,
-                    "message": "Документы не найдены. Попробуйте изменить параметры поиска."
+                    "message": message
                 }
 
             logger.info(f"Найдено документов: {len(results)}")
@@ -462,7 +487,8 @@ class AdiletSearchTool(BaseTool):
                 params=params,
                 headers=headers,
                 timeout=15,
-                allow_redirects=True
+                allow_redirects=True,
+                verify=False  # Обход проверки SSL для adilet.zan.kz
             )
 
             logger.info(f"Ответ от adilet.zan.kz: статус {response.status_code}, URL: {response.url}")
@@ -757,7 +783,8 @@ class AdiletDocumentFetcher(BaseTool):
             logger.info(f"Получение документа: {url}")
 
             # Отправляем запрос
-            response = self.session.get(url, timeout=15)
+            # verify=False для обхода проблем с SSL сертификатом adilet.zan.kz
+            response = self.session.get(url, timeout=15, verify=False)
             response.raise_for_status()
 
             # Парсим документ
